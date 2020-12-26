@@ -172,7 +172,7 @@ fn main() {
 So this is actually designing our new stack. `hello` is a pointer already \(a function pointer\) so we can cast it directly as an `u64` since all pointers on 64 bits systems will be, well, 64 bit, and then we write this pointer to our new stack.
 
 {% hint style="info" %}
-We'll talk more about the stack in the next chapter but one thing we need to know already now is that the stack grows downwards. If our 48 byte stack starts at index _0_, and ends on index _47,_ index _32_ will be the first index of a 16 byte offset from the start/base of our stack.
+We'll talk more about the stack in the next chapter but one thing we need to know already now is that the stack grows downwards. If our 48 byte stack starts at index _0_, and ends on index _47,_ index _32_ will be the first index of a 16 byte offset from the end of our stack.
 {% endhint %}
 
 Make note that we write the pointer to an the offset of 16 bytes from the base of our stack \(remember what I wrote about 16 byte alignment?\).

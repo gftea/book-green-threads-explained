@@ -256,6 +256,8 @@ pub fn spawn(&mut self, f: fn()) {
     }
     available.state = State::Ready;
 }
+
+// Remember to close "}" the `impl Runtime` block here
 ```
 
 While `t_yield` is the logically interesting function I think this the technically most interesting.

@@ -50,7 +50,7 @@ As you can see, this is basically watching the history of CPUs evolve in front o
 
 The `word` size in assembly also has historical reasons. It stems from the time when the CPU had 16 bit data buses, so a `word` is 16 bits. This is relevant because in the AT&T dialect you will see many instructions suffixed with "q" \(quad-word\), or "l" \(long-word\). So a `movq` would mean a move of 4 \* 16 bits = 64 bits.
 
-A plain `mov` will use the size of the register you use. This is the standard in the AT&T dialect and the one we will use in our code.
+A plain `mov` will use the size of the register you use. This is the standard in the Intel dialect and the one we will use in our code.
 
 We will go through a bit more of the syntax of inline assembly in the next chapter.
 
