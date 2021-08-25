@@ -352,7 +352,7 @@ There are two things in this function that differs from our first function:
 
 The first is the attribute `#[inline(never)]`, this attribute prevents the compiler from `inlining` this function. I spent some time figuring this out, but the code will fail when running on `--release`builds if we don't include it.
 
-The `"volatile"` `option` is new. As I warned before, inline assembly can be a bit gnarly, but this indicates that our assembly has side effects. When providing our parameters as `input` we need to make sure the compiler knows that we are changing one of the parameters passed in and not only reading from them.
+Notice that we don't need to explicitly add a `ret` instruction at the end of the inline assembly. **As long as this function isn't inlined,** the compiler will add a `ret` instruction at the end for us so we don't need to explicitly add that.
 
 ```rust
 0x00($1) # 0

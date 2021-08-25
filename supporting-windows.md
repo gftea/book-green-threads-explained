@@ -224,7 +224,7 @@ struct ThreadContext {
 {% endtab %}
 {% endtabs %}
 
-Last we need to change our `switch()`function and update our assembly. After all this explanation this is pretty easy:
+Last we need to change our `swtich()`function and update our assembly. After all this explanation this is pretty easy:
 
 ```rust
 #[cfg(target_os = "windows")]
