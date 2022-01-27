@@ -20,7 +20,7 @@ When we set the `stack pointer`in a _16 byte aligned_ stack, we need to make sur
 
 \`\`
 
-If we add the following lines of code to our example in the last chapter just before we do the switch in our main function we can effectively print out our stack and have a look at it:
+If we add the following lines of code to our example in the last chapter just before we do the switch in our main function, we can effectively print out our stack and have a look at it:
 
 ```rust
 for i in (0..SSIZE).rev() {
@@ -84,13 +84,13 @@ mem: 94846750517824, val: 0
 I LOVE WAKING UP ON A NEW STACK!
 ```
 
-I've printed out the memory addresses as u64 here so it's easier to parse if you're not very familiar with hex.
+I've printed out the memory addresses as u64 here, so it's easier to parse if you're not very familiar with hex.
 
 The first thing to note is that this is just a contiguous piece of memory, starting at address `94846750517824` and ending on `94846750517871`.
 
-The addresses `94846750517856`to `94846750517863`is of special interest for us. The first address is the address of our "stack pointer", the value we write to the `%rsp`register of the CPU. The range represents the values we wrote to the stack before we made the switch.
+The addresses `94846750517856`to `94846750517863`is of special interest to us. The first address is the address of our "stack pointer", the value we write to the `%rsp`register of the CPU. The range represents the values we wrote to the stack before we made the switch.
 
-In other words the values `240, 205, 252, 56, 67, 86, 0, 0` is the pointer to our `hello()` function written as `u8`values.
+In other words, the values `240, 205, 252, 56, 67, 86, 0, 0` is the pointer to our `hello()` function written as `u8`values.
 
 {% hint style="info" %}
 An interesting side note here is that the order the CPU writes an `u64` as `u8` bytes is dependent on it's endianness. I'll simply refer to the [wikipedia article](https://en.wikipedia.org/wiki/Endianness), but if you try to parse these numbers manually you'll have to bear this in mind.
@@ -100,15 +100,15 @@ As we write more complex functions our extremely small 48 byte stack will soon r
 
 ### Stack sizes
 
-When you start a process in most modern operating systems the standard stack size is normally 8 MB but it can be configured differently, this is enough for most programs but it's up to the programmer to make sure we don't use more than we have. This is the cause of the dreaded "stack overflow" that most of us have experienced.
+When you start a process in most modern operating systems the standard stack size is normally 8 MB but it can be configured differently, this is enough for most programs, but it's up to the programmer to make sure we don't use more than we have. This is the cause of the dreaded "stack overflow" that most of us have experienced.
 
-However, when we can control the stacks ourselves we can choose the size we want. 8 MB for each context is way more than we need when running simple functions in a web server for example, so by reducing the stack size we can have millions of Green Threads running on a machine, while we run out of memory a lot sooner using stacks provided by the operating system.
+However, when we can control the stacks ourselves, we can choose the size we want. 8 MB for each context is way more than we need when running simple functions in a web server for example, so by reducing the stack size we can have millions of Green Threads running on a machine, while we run out of memory a lot sooner using stacks provided by the operating system.
 
 ### Growable stacks
 
-Some implementations use growable stacks. This lets us allocate a small part of memory that's enough stack space for most tasks, but instead of causing a stack overflow when we use all of our stack it allocates a new an larger stack and moves everything from the stack it outgrew to a new and larger stack where it can resume the program execution.
+Some implementations use growable stacks. This lets us allocate a small part of memory that's enough stack space for most tasks, but instead of causing a stack overflow when we use all of our stack it allocates a new and larger stack and moves everything from the stack it outgrew to a new and larger stack where it can resume the program execution.
 
-GO is an example of this. It starts out with a 8 KB stack and when it runs out of space it reallocates to a larger stack. As in every thing in programming this has some trade-offs, all the pointers you have needs to be updated correctly, and this is not an easy task. If you're more interested in how GO handles it's stack (which is a good example of the use and trade-offs using a growable stack) I'll refer you to this article: [https://blog.cloudflare.com/how-stacks-are-handled-in-go/](https://blog.cloudflare.com/how-stacks-are-handled-in-go/).
+GO is an example of this. It starts out with an 8 KB stack and when it runs out of space it reallocates to a larger stack. As in every thing in programming this has some trade-offs, all the pointers you have needs to be updated correctly, and this is not an easy task. If you're more interested in how GO handles its stack (which is a good example of the use and trade-offs using a growable stack) I'll refer you to this article: [https://blog.cloudflare.com/how-stacks-are-handled-in-go/](https://blog.cloudflare.com/how-stacks-are-handled-in-go/).
 
 {% hint style="info" %}
 Note one thing that will be important later: We used a normal `Vec<u8>` from Rusts standard library. It is very convenient for us but this has some problems. Among others, we have no guarantee that it will stay in the same location in memory.
@@ -116,7 +116,7 @@ Note one thing that will be important later: We used a normal `Vec<u8>` from Rus
 As you might understand, if the stack is moved to a different address space our program will crash since all our pointers will be invalid. Something as simple as doing a `push()` to our stack might trigger an expansion and when a `Vec` expands it asks for a new, and larger, piece of memory and moves the values over.
 {% endhint %}
 
-Ok, now that we've gone through the basics of how a stack looks and works and we are ready to move on to implementing our green threads. You've already done much of the hard work so I promise more code now.
+Ok, now that we've gone through the basics of how a stack looks and works, and we are ready to move on to implementing our green threads. You've already done much of the hard work, so I promise more code now.
 
 ### How to set up the stack
 
@@ -126,30 +126,30 @@ The Windows x64-86 sets up its stack slightly differently from the x64-86 psABI 
 
 ![](.gitbook/assets/bilde.png)
 
-As you know now the `%rsp`is our stack pointer. Now as you see we need to put the stack pointer in a position which is a multiple of 16 from our base. The return address is located in the adjacent 8 bytes, and as you see there is a room for memory arguments above that. We need to keep this in mind when we want to do more complex things than we have so far.
+As you know now, the `%rsp`is our stack pointer. Now as you see we need to put the stack pointer in a position which is a multiple of 16 from our base. The return address is located in the adjacent 8 bytes, and as you see there is a room for memory arguments above that. We need to keep this in mind when we want to do more complex things than we have so far.
 
-You'll notice that we regularly write the address of our function pointer to `stack_ptr + SSIZE - 16` without me explaining exactly why. `SSIZE` is the stack size in bytes by the way.
+You'll notice that we regularly write the address of our function pointer to `stack_ptr + SSIZE - 16` without me explaining exactly why. `SSIZE` is the stack size in bytes, by the way.
 
 Think of it this way. We know that the size of a pointer (in this case a function pointer) is 8 bytes. We know that `rsp` needs to be written to a 16 byte boundary to satisfy the ABI.
 
-We really have no other choice than to write the function pointer address to `stack_ptr + SSIZE - 16`. Since we write our bytes from low to high addresses we:
+We really have no other choice than to write the function pointer address to `stack_ptr + SSIZE - 16`. Since we write our bytes from low to high addresses, we:
 
-* Can't write it to `stack_ptr + SSIZE` (which is a 16 byte boundary) since we would write the bytes outside our allocated memory which is not allowed.
+* Can't write it to `stack_ptr + SSIZE` (which is a 16 byte boundary) since we would write the bytes outside our allocated memory, which is not allowed.
 * Can't write it to `stack_ptr + SSIZE - 8` which would be a valid memory space, but it's not aligned to a 16 byte boundary.
 
 That leaves us with `stack_ptr + SSIZE - 16`as the first suitable position. In practice, we write the 8 bytes in the positions: `-16, 15, ..., -10, -9`from the _high address_ of our stack (confusingly, this is often called the bottom of the stack since it grows downwards).
 
 ## Bonus material
 
-If you are curious enough you might wonder what happens with the stack after we switch over to it?
+If you are curious enough, you might wonder what happens with the stack after we switch over to it?
 
 The answer is that our code written in Rust compiles to instructions for our CPU which then takes over and uses our stack just like any other stack.
 
-Unfortunately to show this I had to increase the stack size to 1024 bytes to allow for the code to print out the stack itself to get enough space so it's not something we could print out here.
+Unfortunately to show this I had to increase the stack size to 1024 bytes to allow for the code to print out the stack itself to get enough space, so it's not something we could print out here.
 
 ### Taking a look at the stack
 
-However, I made a altered version of our example that you can run which prints out two text files one `BEFORE.txt`that prints out our stack before we switch over to it and one `AFTER.txt`that prints out the stack after we switched. You can then see for yourself how the stack now is alive and used by our code.
+However, I made an altered version of our example that you can run which prints out two text files one `BEFORE.txt`that prints out our stack before we switch over to it and one `AFTER.txt`that prints out the stack after we switched. You can then see for yourself how the stack now is alive and used by our code.
 
 {% hint style="info" %}
 If you see anything you don't recognize in this code, relax, we will go through them thoroughly very soon.
@@ -198,7 +198,7 @@ fn hello() {
 
 unsafe fn gt_switch(new: *const ThreadContext) {
     asm!(
-        "mov rsp, 0x00[{0}]",
+        "mov rsp, [{0} + 0x00]",
         "ret",
         in(reg) new
     );
