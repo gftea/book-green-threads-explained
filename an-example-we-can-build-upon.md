@@ -67,7 +67,7 @@ Next up is our inline assembly, where we switch over to our own stack.
 ```rust
 unsafe fn gt_switch(new: *const ThreadContext) {
     asm!(
-        "mov rsp, 0x00[{0}]",
+        "mov rsp, [{0} + 0x00]",
         "ret",
         in(reg) new,
     );
@@ -105,6 +105,10 @@ The first thing the macro takes as input is the assembly template:
 ```
 
 This is a simple instruction that moves the value stored at `0x00` offset (that means no offset at all in hex) from the memory location at `{0}` to the `rsp` register. Since the `rsp` register stores a pointer to the next value on the stack, we effectively push the address we provide it on top of the current stack, overwriting what's already there.
+
+{% hint style="success" %}
+Note that we don't need to write `[{0} + 0x00]` when we don't want an offset from he memory location. Writing `mov rsp, [{0}]`would be perfectly fine. However, I chose to introduce offset parameter here as we'll need it later on.
+{% endhint %}
 
 Note that the Intel syntax is a little "backwards". You might be tempted to think `mov a, b`means "move what's at `a` to `b`" but the Intel dialect usually dictates that the destination register is first and the source second.&#x20;
 
