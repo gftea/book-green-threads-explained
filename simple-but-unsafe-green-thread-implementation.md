@@ -7,28 +7,27 @@ Before we start I'll mention that the code we write is quite unsafe and is not a
 The first thing we do is to delete our example in our `main.rs`so we start from scratch and add the following:
 
 ```rust
-#![feature(llvm_asm)]
 #![feature(naked_functions)]
-use std::ptr;
+use std::arch::asm;
 
 const DEFAULT_STACK_SIZE: usize = 1024 * 1024 * 2;
 const MAX_THREADS: usize = 4;
 static mut RUNTIME: usize = 0;
 ```
 
-We enable two features the `asm` feature that we covered earlier, and the `naked_functions` feature, that we need to explain.
+We import the `asm` macro that we covered earlier, and we enable the `naked_functions` feature, that we need to explain.
 
 ### naked\_functions
 
 You see, when Rust compiles a function, it adds a small prologue and epilogue to each function and this causes some issues for us when we switch contexts since we end up with a misaligned stack. This worked fine in our first simple example but once we need to switch back to the same stack again we en up in trouble. Marking the a function as `#[naked]`removes the prologue and epilogue. This attribute is mostly used in relation to inline assembly.
 
 {% hint style="info" %}
-If you are interested you can read more about the `naked_functions` feature in [RFC \#1201](https://github.com/rust-lang/rfcs/blob/master/text/1201-naked-fns.md)
+If you are interested you can read more about the `naked_functions` feature in [RFC #1201](https://github.com/rust-lang/rfcs/blob/master/text/1201-naked-fns.md)
 {% endhint %}
 
 Our `DEFAULT_STACK_SIZE` is set to 2 MB which is more than enough for our use. We also set `MAX_THREADS` to 4 since we don't need more for our example.
 
-The last constant `RUNTIME` is a pointer to our runtime \(yeah, I know, it's not pretty with a mutable global variable but we need it later and we're only setting this variable on runtime initialization\).
+The last constant `RUNTIME` is a pointer to our runtime (yeah, I know, it's not pretty with a mutable global variable but we need it later and we're only setting this variable on runtime initialization).
 
 Let's start fleshing out something to represent our data:
 
@@ -103,7 +102,7 @@ One thing to note is that we allocate our stack here. That is not needed and is 
 {% hint style="warning" %}
 The important thing to note is that once a stack is allocated it must not move! No`push()`on the vector or any other methods that might trigger a reallocation. In a better version of this code we would make our own type that only exposes the methods we consider safe to use.
 
-it's worth mentioning that`Vec<T>`has a [method ](https://doc.rust-lang.org/std/vec/struct.Vec.html#method.into_boxed_slice)called`into_boxed_slice()`which returns a heap allocated slice `Box<[T]>`. Slices can't grow, so if we store that instead we can avoid the reallocation problem.
+it's worth mentioning that`Vec<T>`has a [method ](https://doc.rust-lang.org/std/vec/struct.Vec.html#method.into\_boxed\_slice)called`into_boxed_slice()`which returns a heap allocated slice `Box<[T]>`. Slices can't grow, so if we store that instead we can avoid the reallocation problem.
 {% endhint %}
 
 ## Implementing the Runtime
@@ -171,13 +170,14 @@ This is where we start running our run-time. It will continually call `t_yield()
 
 This is our return function that we call when the thread is finished. `return` is another reserved keyword in Rust so we name this `t_return()`. Make a note that the _user_ of our threads does not call this, we set up our stack so this is called when the task is done.
 
-If the calling thread is the `base_thread` we don't do anything. Our runtime will call `yield` for us on the base thread. If it's called from a spawned thread we know it's finished since all threads have a `guard` function on top of their stack \(which we'll show further down\) and the only place this function is called is on our `guard` function.
+If the calling thread is the `base_thread` we don't do anything. Our runtime will call `yield` for us on the base thread. If it's called from a spawned thread we know it's finished since all threads have a `guard` function on top of their stack (which we'll show further down) and the only place this function is called is on our `guard` function.
 
 We set its state to `Available` letting the runtime know it's ready to be assigned a new task and then immediately call `t_yield` which will schedule a new thread to be run.
 
 Next: our `yield` function:
 
 ```rust
+    #[inline(never)]
     fn t_yield(&mut self) -> bool {
         let mut pos = self.current;
         while self.threads[pos].state != State::Ready {
@@ -201,11 +201,7 @@ Next: our `yield` function:
         unsafe {
             let old: *mut ThreadContext = &mut self.threads[old_pos].ctx;
             let new: *const ThreadContext = &self.threads[pos].ctx;
-            llvm_asm!(
-                "mov $0, %rdi
-                 mov $1, %rsi"::"r"(old), "r"(new)
-            );
-            switch();
+            asm!("call switch", in("rdi") old, in("rsi") new, clobber_abi("C"));
         }
         self.threads.len() > 0
     }
@@ -218,22 +214,32 @@ Here we go through all the threads and see if anyone is in the `Ready` state whi
 If no thread is `Ready` we're all done. This is an extremely simple scheduler using only a round-robin algorithm, a real scheduler might have a much more sophisticated way of deciding what task to run next.
 
 {% hint style="info" %}
-This is a very naive implementation tailor-made for our example. What happens if our thread is not ready to make progress \(not in a `Ready` state\) and still waiting for a response from i.e. a database?
+This is a very naive implementation tailor-made for our example. What happens if our thread is not ready to make progress (not in a `Ready` state) and still waiting for a response from i.e. a database?
 
 it's not too difficult to work around this, instead of running our code directly when a thread is `Ready` we could instead poll it for a status. For example it could return `IsReady` if it's really ready to run or `Pending` if it's waiting for some operation to finish. In the latter case we could just leave it in its `Ready` state to get polled again later. Does this sound familiar? If you've read about how [Futures](https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.16/futures/task/enum.Poll.html#variant.Pending) work in Rust, we are starting to connect some dots on how this all fits together.
 {% endhint %}
 
 If we find a thread that's ready to be run we change the state of the current thread from `Running` to `Ready`.
 
-Then we call `switch` which will save the current context \(the old context\) and load the new context into the CPU. The new context is either a new task, or all the information the CPU needs to resume work on an existing task.
+Then we call `switch` which will save the current context (the old context) and load the new context into the CPU. The new context is either a new task, or all the information the CPU needs to resume work on an existing task.
+
+The `#[inline(never)]`attribute prevents the compiler from simply substituting a call to our function with a copy of the function content where it's called (inlining). This is almost never a problem on debug builds, but in this case it will make our program fail if the compiler inlines this function in a release build.
+
+{% hint style="info" %}
+### More inline assembly
+
+As promised, we need to explain the new concepts we introduced here. The assembly calls the function `switch`(the function is tagged with `#[no_mangle]`so we can call it by name. The `in("rdi") old` and `in("rsi") new`arguments places the value of `old` and `new` to the `rdi` and `rsi` registers respectively. On Linux the ABI states that the "rdi" register holds the first argument to a function, and "rsi" holds the second argument.
+
+The `clobber_abi("C")`means that we ask the compiler to treat all registers the C-ABI specifies as unsafe to assume is untouched by our function call as clobbered. This means that the compiler will push the values of these registers on to the stack before callin `switch`and pop them back in to the same registers once the function returns. The ABI on Windows x86-64 will be "system" instead of "C" so this will differ depending on the operating system.
+{% endhint %}
 
 {% hint style="info" %}
 ### The Inconvenient Truth About Naked Functions
 
-Naked functions are not like normal functions. They don't accept formal arguments for example. Usually, if we call a function with two arguments, the compiler will place each argument in a register described by the calling convention for the platform. When we call a`#[naked]`function we need to take care of this ourselves. Therefore we pass in the address to our "old" and "new"  `ThreadContext` using assembly. `%rdi` is the register for the first argument in the Linux calling convention \(which is the same for MacOS\) and `%rsi`is the register used for the second argument.
+Naked functions are not like normal functions. They don't accept formal arguments for example. Usually, if we call a function with two arguments, the compiler will place each argument in a register described by the calling convention for the platform. When we call a`#[naked]`function we need to take care of this ourselves. Therefore we pass in the address to our "old" and "new"  `ThreadContext` using assembly. `%rdi` is the register for the first argument in the Linux calling convention (which is the same for MacOS) and `%rsi`is the register used for the second argument.
 {% endhint %}
 
-The `self.threads.len() > 0`part in the end is just a way for us to prevent the compiler from optimizing our code away. This happens to me on Windows but not on Linux and is a common problem when running benchmarks for example. Therefore we could use [`std::hint::black_box`](https://doc.rust-lang.org/std/hint/fn.black_box.html)to prevent the compiler from going too far and skipping steps we need in order to execute the code faster. I chose a different route and as long as it's commented it should be OK. The code never reaches this point anyway.
+The `self.threads.len() > 0`part in the end is just a way for us to prevent the compiler from optimizing our code away. This happens to me on Windows but not on Linux and is a common problem when running benchmarks for example. Therefore we could use [`std::hint::black_box`](https://doc.rust-lang.org/std/hint/fn.black\_box.html)to prevent the compiler from going too far and skipping steps we need in order to execute the code faster. I chose a different route and as long as it's commented it should be OK. The code never reaches this point anyway.
 
 Next up is our `spawn()`function:
 
@@ -264,7 +270,7 @@ While `t_yield` is the logically interesting function I think this the technical
 
 This is where we set up our stack like we talked about in the previous chapter and making sure our stack looks like the one specified in the psABI [stack layout](the-stack.md#how-to-set-up-the-stack).
 
-When we spawn a new thread we first check if there are any available threads \(threads in `Available` state\). If we run out of threads we panic in this scenario but there are several \(better\) ways to handle that. We keep things simple for now.
+When we spawn a new thread we first check if there are any available threads (threads in `Available` state). If we run out of threads we panic in this scenario but there are several (better) ways to handle that. We keep things simple for now.
 
 When we find an available thread we get the stack length and a pointer to our `u8` byte-array.
 
@@ -291,11 +297,13 @@ fn guard() {
 }
 ```
 
-The function means that the function we passed in has returned and that means our thread is finished running its task so we de-reference our `Runtime` and call `t_return()`. We could have made a function that does some additional work when a thread is finished but right now our `t_return()` function does all we need. It marks our thread as `Available` \(if it's not our base thread\) and `yields` so we can resume work on a different thread.
+The function means that the function we passed in has returned and that means our thread is finished running its task so we de-reference our `Runtime` and call `t_return()`. We could have made a function that does some additional work when a thread is finished but right now our `t_return()` function does all we need. It marks our thread as `Available` (if it's not our base thread) and `yields` so we can resume work on a different thread.
 
 ```rust
 #[naked]
-fn skip() { }
+unsafe fn skip() {
+    asm!("ret", options(noreturn))
+}
 ```
 
 There is not much happening in the `skip` function. We use the `#[naked]`attribute so that this function essentially compiles down to just `ret`instruction. `ret`will just pop off the next value from the stack and jump to whatever instructions that address points to. In our case this is the `guard`function. As you probably remember from [previous chapters](background-information.md) this makes sure that we comply with the ABI requirements.
@@ -315,30 +323,29 @@ We are very soon at the finish line, just one more function to go. This one shou
 
 ```rust
 #[naked]
-#[inline(never)]
+#[no_mangle]
 unsafe fn switch() {
-    llvm_asm!("
-        mov     %rsp, 0x00(%rdi)
-        mov     %r15, 0x08(%rdi)
-        mov     %r14, 0x10(%rdi)
-        mov     %r13, 0x18(%rdi)
-        mov     %r12, 0x20(%rdi)
-        mov     %rbx, 0x28(%rdi)
-        mov     %rbp, 0x30(%rdi)
-
-        mov     0x00(%rsi), %rsp
-        mov     0x08(%rsi), %r15
-        mov     0x10(%rsi), %r14
-        mov     0x18(%rsi), %r13
-        mov     0x20(%rsi), %r12
-        mov     0x28(%rsi), %rbx
-        mov     0x30(%rsi), %rbp
-        "
+    asm!(
+        "mov [rdi + 0x00], rsp",
+        "mov [rdi + 0x08], r15",
+        "mov [rdi + 0x10], r14",
+        "mov [rdi + 0x18], r13",
+        "mov [rdi + 0x20], r12",
+        "mov [rdi + 0x28], rbx",
+        "mov [rdi + 0x30], rbp",
+        "mov rsp, [rsi + 0x00]",
+        "mov r15, [rsi + 0x08]",
+        "mov r14, [rsi + 0x10]",
+        "mov r13, [rsi + 0x18]",
+        "mov r12, [rsi + 0x20]",
+        "mov rbx, [rsi + 0x28]",
+        "mov rbp, [rsi + 0x30]",
+        "ret", options(noreturn)
     );
 }
 ```
 
-So here is our inline Assembly. As you remember from our first example this is just a bit more elaborate where we first read out the values of all the registers we need and then sets all the register values to the register values we saved when we suspended execution on the "new" thread.
+So here is our stack switch in inline Assembly. As you remember from our first example this is just a bit more elaborate where we first read out the values of all the registers we need and then sets all the register values to the register values we saved when we suspended execution on the "new" thread.
 
 This is essentially all we need to do to save and resume execution.
 
@@ -348,20 +355,16 @@ Here we see the `#[naked]`attribute used again. Usually every function has a pro
 Most of this inline assembly is explained in the end of the chapter [An example we can build upon](an-example-we-can-build-upon.md) so if this seems foreign to you, go and read that part of the chapter and come back.
 {% endhint %}
 
-There are two things in this function that differs from our first function:
-
-The first is the attribute `#[inline(never)]`, this attribute prevents the compiler from `inlining` this function. I spent some time figuring this out, but the code will fail when running on `--release`builds if we don't include it.
-
-Notice that we don't need to explicitly add a `ret` instruction at the end of the inline assembly. **As long as this function isn't inlined,** the compiler will add a `ret` instruction at the end for us so we don't need to explicitly add that.
+Here you can see us using the offset we talked about earlier in practice:
 
 ```rust
-0x00($1) # 0
-0x08($1) # 8
-0x10($1) # 16
-0x18($1) # 24
+0x00[rdi] # 0
+0x08[rdi] # 8
+0x10[rdi] # 16
+0x18[rdi] # 24
 ```
 
-I mentioned this briefly, but here you see it in action. These are `hex` numbers indicating the _offset_ from the memory pointer to which we want to read/write. I wrote down the base-10 numbers as comments so you see we only offset the pointer in 8 byte steps which is the same size as the `u64` fields on our `ThreadContext` struct.
+These are `hex` numbers indicating the _offset_ from the memory pointer to which we want to read/write. I wrote down the base-10 numbers as comments so you see we only offset the pointer in 8 byte steps which is the same size as the `u64` fields on our `ThreadContext` struct.
 
 This is also why it's important to annotate `ThreadContext` with `#[repr(C)]` so we know that the data will be represented in memory this way and we write to the right field. The Rust ABI makes no guarantee that they are represented in the same order in memory, however the C-ABI does.
 
@@ -395,7 +398,7 @@ fn main() {
 
 As you see here we initialize our runtime and spawn two threads one that counts to 10 and `yields` between each count, and one that counts to 15. When we `cargo run` our project we should get the following output:
 
-```text
+```
 Finished dev [unoptimized + debuginfo] target(s) in 2.17s
 Running `target/debug/green_threads`
 THREAD 1 STARTING
@@ -434,4 +437,3 @@ Beautiful!! Our threads alternate since they yield control on each count until t
 ## Congratulations
 
 You have now implemented a super simple, but working, example of green threads. It was quite a ride we had to take, but if you came this far and read through everything you deserve a little break. Thanks for reading!
-

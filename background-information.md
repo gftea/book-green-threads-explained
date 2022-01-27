@@ -8,7 +8,7 @@ We will cover one of the more commonly used architectures: x86-64.
 
 **In this architecture the CPU features a set of 16 registers:**
 
-![Click the picture to view an enlarged view](https://lh5.googleusercontent.com/qcybPMAwX9KpEBFFt86ioZDRREjn7MgdiOESIhTVNr4WOpjf-xvrBj2cF5XnIdjd0eUP27h_Ay-6wz_piQoCxQPJWzoi4Wmy0Z-pmUM13-Nefh8dYTFqiOf_wzAbgXmbVimKzJhF)
+![Click the picture to view an enlarged view](https://lh5.googleusercontent.com/qcybPMAwX9KpEBFFt86ioZDRREjn7MgdiOESIhTVNr4WOpjf-xvrBj2cF5XnIdjd0eUP27h\_Ay-6wz\_piQoCxQPJWzoi4Wmy0Z-pmUM13-Nefh8dYTFqiOf\_wzAbgXmbVimKzJhF)
 
 If you're interested you can find the rest of the specification here: [https://github.com/hjl-tools/x86-psABI/wiki/X86-psABI](https://github.com/hjl-tools/x86-psABI/wiki/X86-psABI).
 
@@ -16,8 +16,8 @@ Out of interest for us right now is the registers marked as "callee saved". Thes
 
 If we want to direct the CPU directly we need some minimal code written in Assembly, fortunately we only need to know some very basic assembly instructions for our mission. How to move values to and from registers:
 
-```text
-mov     %rsp, %rax
+```
+mov  rax, rsp
 ```
 
 {% hint style="info" %}
@@ -26,33 +26,32 @@ Windows has a slightly different convention. On Windows the registers XMM6:XMM15
 There are one more subtle difference as well that you can read about in [Appendix: Supporting Windows](supporting-windows.md) where we go through everything. You can follow along anyway, since everything will work on Windows, but it will not be a correct implementation.
 {% endhint %}
 
-## A super quick introduction to Assembly  <a id="docs-internal-guid-bc1ce7bf-7fff-2c5d-a4d5-c91055081781"></a>
+## A super quick introduction to Assembly  <a href="#docs-internal-guid-bc1ce7bf-7fff-2c5d-a4d5-c91055081781" id="docs-internal-guid-bc1ce7bf-7fff-2c5d-a4d5-c91055081781"></a>
 
 First and foremost. Assembly language is not very portable, each CPU might have a special set of instructions, however some are common on most desktop computers today.
 
-There are two popular dialects: AT&T dialect and Intel dialect.
+There are two popular dialects: AT\&T dialect and Intel dialect.
 
-The AT&T dialect is the standard when writing inline assembly in Rust, but in Rust we can specify that we want to use the "Intel" dialect instead if we want to. Rust mainly leaves it up to LLVM to deal with inline assembly, and the inline assembly for LLVM closely resembles the same syntax which is used when writing inline assembly in C. That makes it a lot easier to look at C inline ASM for learning since the syntax will be very familiar \(though not exactly the same\).
+The Intel dialect is the standard when writing inline assembly in Rust, but in Rust we can specify that we want to use the "AT\&T" dialect instead if we want to. Rust has its own take on how to do inline assembly that will at first glance look foreign to anyone used to inline assembly in C. It's well thought through though, and I'll spend a bit of time to explain it more thoroughly as we go through the code so both readers with experience with the C-type inline assembly and readers who have no experience should be able to follow along.
 
-_We will use the AT&T dialect in our examples._
+_We will use the Intel dialect in our examples._
 
-Assembly has a strong backwards compatibility guarantee. That's why you will see that the same registers are addressed in different ways. Let's look at the `%rax` register we used as example above for an explanation:
+Assembly has a strong backwards compatibility guarantee. That's why you will see that the same registers are addressed in different ways. Let's look at the `rax` register we used as an example above for an explanation:
 
-```text
-%rax    # 64 bit register (8 bytes)
-%eax    # 32 low bits of the "rax" register
-%ax     # 16 low bits of the "rax" register
-%ah     # 8 high bits of the "ax" part of the "rax" register
-%al     # 8 low bits of the "ax" part of the "rax" register
+```
+rax    # 64 bit register (8 bytes)
+eax    # 32 low bits of the "rax" register
+ax     # 16 low bits of the "rax" register
+ah     # 8 high bits of the "ax" part of the "rax" register
+al     # 8 low bits of the "ax" part of the "rax" register
 ```
 
 As you can see, this is basically watching the history of CPUs evolve in front of us. Since most CPUs today are 64 bits, we will use the 64 bit registers in our code.
 
-The `word` size in assembly also has historical reasons. It stems from the time when the CPU had 16 bit data buses, so a `word` is 16 bits. This is relevant because in the AT&T dialect you will see many instructions suffixed with "q" \(quad-word\), or "l" \(long-word\). So a `movq` would mean a move of 4 \* 16 bits = 64 bits.
+The `word` size in assembly also has historical reasons. It stems from the time when the CPU had 16 bit data buses, so a `word` is 16 bits. This is relevant because in the AT\&T dialect you will see many instructions suffixed with "q" (quad-word), or "l" (long-word). So a `movq` would mean a move of 4 \* 16 bits = 64 bits.
 
-A plain `mov` will use the size of the register you use. This is the standard in the Intel dialect and the one we will use in our code.
+A plain `mov` will use the size of the register you use. This is the standard in both AT\&T and the Intel dialect used in inline assembly, and the one we will use in our code.
 
 We will go through a bit more of the syntax of inline assembly in the next chapter.
 
 One more thing to note is that the **stack alignment on x86-64 is** **16 bytes.** Just remember this for later.
-

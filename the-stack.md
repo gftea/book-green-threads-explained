@@ -16,7 +16,7 @@ Let's start with a simplified view of the stack. A 64 bit CPU will read 8 bytes 
 
 The stack grows downwards, so we start at the top and work our way down.
 
-When we set the `stack pointer`in a _16 byte aligned_ stack, we need to make sure to put our stack pointer to an address which is a _multiple of 16_. In the example above, the only address that satisfies this requirement is `0008`\(remember the stack starts on the top\).
+When we set the `stack pointer`in a _16 byte aligned_ stack, we need to make sure to put our stack pointer to an address which is a _multiple of 16_. In the example above, the only address that satisfies this requirement is `0008`(remember the stack starts on the top).
 
 \`\`
 
@@ -24,15 +24,15 @@ If we add the following lines of code to our example in the last chapter just be
 
 ```rust
 for i in (0..SSIZE).rev() {
-    println!("mem: {}, val: {}", 
-    stack_ptr.offset(i as isize) as usize, 
-    *stack_ptr.offset(i as isize))
+    println!("mem: {}, val: {}",
+    sb_aligned.offset(i as isize) as usize,
+    *sb_aligned.offset(i as isize))
 }
 ```
 
 The output we get is:
 
-```text
+```
 mem: 94846750517871, val: 0
 mem: 94846750517870, val: 0
 mem: 94846750517869, val: 0
@@ -108,7 +108,7 @@ However, when we can control the stacks ourselves we can choose the size we want
 
 Some implementations use growable stacks. This lets us allocate a small part of memory that's enough stack space for most tasks, but instead of causing a stack overflow when we use all of our stack it allocates a new an larger stack and moves everything from the stack it outgrew to a new and larger stack where it can resume the program execution.
 
-GO is an example of this. It starts out with a 8 KB stack and when it runs out of space it reallocates to a larger stack. As in every thing in programming this has some trade-offs, all the pointers you have needs to be updated correctly, and this is not an easy task. If you're more interested in how GO handles it's stack \(which is a good example of the use and trade-offs using a growable stack\) I'll refer you to this article: [https://blog.cloudflare.com/how-stacks-are-handled-in-go/](https://blog.cloudflare.com/how-stacks-are-handled-in-go/).
+GO is an example of this. It starts out with a 8 KB stack and when it runs out of space it reallocates to a larger stack. As in every thing in programming this has some trade-offs, all the pointers you have needs to be updated correctly, and this is not an easy task. If you're more interested in how GO handles it's stack (which is a good example of the use and trade-offs using a growable stack) I'll refer you to this article: [https://blog.cloudflare.com/how-stacks-are-handled-in-go/](https://blog.cloudflare.com/how-stacks-are-handled-in-go/).
 
 {% hint style="info" %}
 Note one thing that will be important later: We used a normal `Vec<u8>` from Rusts standard library. It is very convenient for us but this has some problems. Among others, we have no guarantee that it will stay in the same location in memory.
@@ -130,14 +130,14 @@ As you know now the `%rsp`is our stack pointer. Now as you see we need to put th
 
 You'll notice that we regularly write the address of our function pointer to `stack_ptr + SSIZE - 16` without me explaining exactly why. `SSIZE` is the stack size in bytes by the way.
 
-Think of it this way. We know that the size of a pointer \(in this case a function pointer\) is 8 bytes. We know that `rsp` needs to be written to a 16 byte boundary to satisfy the ABI.
+Think of it this way. We know that the size of a pointer (in this case a function pointer) is 8 bytes. We know that `rsp` needs to be written to a 16 byte boundary to satisfy the ABI.
 
 We really have no other choice than to write the function pointer address to `stack_ptr + SSIZE - 16`. Since we write our bytes from low to high addresses we:
 
-* Can't write it to `stack_ptr + SSIZE` \(which is a 16 byte boundary\) since we would write the bytes outside our allocated memory which is not allowed.
+* Can't write it to `stack_ptr + SSIZE` (which is a 16 byte boundary) since we would write the bytes outside our allocated memory which is not allowed.
 * Can't write it to `stack_ptr + SSIZE - 8` which would be a valid memory space, but it's not aligned to a 16 byte boundary.
 
-That leaves us with `stack_ptr + SSIZE - 16`as the first suitable position. In practice, we write the 8 bytes in the positions: `-16, 15, ..., -10, -9`from the _high address_ of our stack \(confusingly, this is often called the bottom of the stack since it grows downwards\).
+That leaves us with `stack_ptr + SSIZE - 16`as the first suitable position. In practice, we write the 8 bytes in the positions: `-16, 15, ..., -10, -9`from the _high address_ of our stack (confusingly, this is often called the bottom of the stack since it grows downwards).
 
 ## Bonus material
 
@@ -156,8 +156,7 @@ If you see anything you don't recognize in this code, relax, we will go through 
 {% endhint %}
 
 ```rust
-#![feature(llvm_asm)]
-#![feature(naked_functions)]
+use std::arch::asm;
 use std::io::Write;
 
 const SSIZE: isize = 1024;
@@ -198,24 +197,22 @@ fn hello() {
 }
 
 unsafe fn gt_switch(new: *const ThreadContext) {
-    llvm_asm!("
-        mov     0x00($0), %rsp
-        ret
-       "
-    :
-    : "r"(new)
-    :
-    : "alignstack"
+    asm!(
+        "mov rsp, 0x00[{0}]",
+        "ret",
+        in(reg) new
     );
 }
 
-fn main() {
+pub fn main() {
     let mut ctx = ThreadContext::default();
     let mut stack = vec![0_u8; SSIZE as usize];
     let stack_ptr = stack.as_mut_ptr();
 
     unsafe {
-        S_PTR = stack_ptr;
+        let stack_bottom = stack.as_mut_ptr().offset(SSIZE);
+        let sb_aligned = (stack_bottom as usize & !15) as *mut u8;
+        S_PTR = sb_aligned;
         std::ptr::write(stack_ptr.offset(SSIZE - 16) as *mut u64, hello as u64);
         print_stack("BEFORE.txt");
         ctx.rsp = stack_ptr.offset(SSIZE - 16) as u64;
@@ -223,4 +220,3 @@ fn main() {
     }
 }
 ```
-
