@@ -493,7 +493,7 @@ unsafe extern "C" fn switch() {
     );
 }
 
-pub fn run() {
+pub fn main() {
     let mut runtime = Runtime::new();
     runtime.init();
     runtime.spawn(|| {
