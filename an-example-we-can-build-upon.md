@@ -96,7 +96,7 @@ Here we take a pointer to an instance of our `ThreadContext` from which we will 
 asm!(
 ```
 
-This is the `asm!`macro in the Rust standard library. It will check our syntax and provide an error message if it encounters something that doesn't look like valid Intel (by default) Assembly syntax.
+This is the `asm!`macro in the Rust standard library. It will check our syntax and provide an error message if it encounters something that doesn't look like valid Intel (by default) assembly syntax.
 
 The first thing the macro takes as input is the assembly template:
 
@@ -107,14 +107,14 @@ The first thing the macro takes as input is the assembly template:
 This is a simple instruction that moves the value stored at `0x00` offset (that means no offset at all in hex) from the memory location at `{0}` to the `rsp` register. Since the `rsp` register stores a pointer to the next value on the stack, we effectively push the address we provide it on top of the current stack, overwriting what's already there.
 
 {% hint style="success" %}
-Note that we don't need to write `[{0} + 0x00]` when we don't want an offset from he memory location. Writing `mov rsp, [{0}]`would be perfectly fine. However, I chose to introduce offset parameter here as we'll need it later on.
+Note that we don't need to write `[{0} + 0x00]` when we don't want an offset from the memory location. Writing `mov rsp, [{0}]`would be perfectly fine. However, I chose to introduce offset parameter here as we'll need it later on.
 {% endhint %}
 
 Note that the Intel syntax is a little "backwards". You might be tempted to think `mov a, b`means "move what's at `a` to `b`" but the Intel dialect usually dictates that the destination register is first and the source second.&#x20;
 
-To make this confusing, this is the opposite of what's typically the case with the `AT&T`syntax, where reading it as "move `a`to`b`" is the correct thing to do. This is one of the fundamental differences between the two dialect, and it's useful to be aware of.
+To make this confusing, this is the opposite of what's typically the case with the `AT&T`syntax, where reading it as "move `a`to`b`" is the correct thing to do. This is one of the fundamental differences between the two dialects, and it's useful to be aware of.
 
-You will not see `{0}` used like this in normal assembly code. This is part of the assembly template and is a placeholder, the value passed as the first parameter to the macro. You'll notice that this closely matches how string templates are formatted in Rust using `println!`or the like. The parameters are numbered from 0, 1, 2…. We only have one input parameter here, which corresponds to `{0}`.&#x20;
+You will not see `{0}` used like this in normal assembly code. This is part of the assembly template and is a placeholder for the value passed as the first parameter to the macro. You'll notice that this closely matches how string templates are formatted in Rust using `println!`or the like. The parameters are numbered from 0, 1, 2…. We only have one input parameter here, which corresponds to `{0}`.&#x20;
 
 You don't really have to index your parameters like this, writing `{}`in the correct order would suffice (as you would do using the `println!`macro). However, using an index improves readability and I would strongly recommend doing it that way.
 
@@ -134,7 +134,7 @@ in(reg) new,
 
 The first non-assembly argument to the `asm!`macro is our `input` parameter. When we write `in(reg)` we let the compiler decide on a general purpose register to store the value of `new`. `out(reg)` means that the register is an output, so if we write `out(reg) new` we need `new` to be `mut` so we can write a value to it. You'll also find other versions like `inout` and `lateout`&#x20;
 
-Inline assembly is quite complex, so we'll take this step by step and introduce the details on how these parameters are used when we need them.
+Inline assembly is quite complex, so we'll take this step by step and introduce the details on how these parameters are used gradually as we use them in our code.
 
 #### Options
 

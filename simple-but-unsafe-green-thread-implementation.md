@@ -228,9 +228,9 @@ The `#[inline(never)]`attribute prevents the compiler from simply substituting a
 {% hint style="info" %}
 ### More inline assembly
 
-As promised, we need to explain the new concepts we introduced here. The assembly calls the function `switch`(the function is tagged with `#[no_mangle]`so we can call it by name. The `in("rdi") old` and `in("rsi") new`arguments places the value of `old` and `new` to the `rdi` and `rsi` registers respectively. On Linux the ABI states that the "rdi" register holds the first argument to a function, and "rsi" holds the second argument.
+As promised, we need to explain the new concepts we introduced here. The assembly calls the function `switch`(the function is tagged with `#[no_mangle]`so we can call it by name). The `in("rdi") old` and `in("rsi") new`arguments places the value of `old` and `new` to the `rdi` and `rsi` registers respectively. On Linux, the ABI states that the "rdi" register holds the first argument to a function, and "rsi" holds the second argument.
 
-The `clobber_abi("C")`means that we ask the compiler to treat all registers the C-ABI specifies as unsafe to assume is untouched by our function call as clobbered. This means that the compiler will push the values of these registers on to the stack before callin `switch`and pop them back in to the same registers once the function returns. The ABI on Windows x86-64 will be "system" instead of "C" so this will differ depending on the operating system.
+The `clobber_abi("C")`means that we ask the compiler to treat all registers the C-ABI specifies as "unsafe to assume untouched" by our function call as clobbered. This means that the compiler will push the values of these registers on to the stack before calling `switch`and pop them back in to the same registers once the function returns. The ABI on Windows x86-64 will be "system" instead of "C" so this will differ depending on the operating system.
 {% endhint %}
 
 {% hint style="info" %}
