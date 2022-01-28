@@ -138,7 +138,7 @@ impl Runtime {
 }
 
 #[naked]
-unsafe fn skip() {
+unsafe extern "C" fn skip() {
     asm!("ret", options(noreturn))
 }
 
@@ -158,7 +158,7 @@ pub fn yield_thread() {
 
 #[naked]
 #[no_mangle]
-unsafe fn switch() {
+unsafe extern "C" fn switch() {
     asm!(
         "mov [rdi + 0x00], rsp",
         "mov [rdi + 0x08], r15",

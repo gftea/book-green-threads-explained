@@ -236,7 +236,7 @@ The `clobber_abi("C")`means that we ask the compiler to treat all registers the 
 {% hint style="info" %}
 ### The Inconvenient Truth About Naked Functions
 
-Naked functions are not like normal functions. They don't accept formal arguments for example. Usually, if we call a function with two arguments, the compiler will place each argument in a register described by the calling convention for the platform. When we call a`#[naked]`function we need to take care of this ourselves. Therefore we pass in the address to our "old" and "new"  `ThreadContext` using assembly. `%rdi` is the register for the first argument in the Linux calling convention (which is the same for MacOS) and `%rsi`is the register used for the second argument.
+Naked functions are not like normal functions. They don't accept formal arguments for example. Usually, if we call a function with two arguments, the compiler will place each argument in a register described by the calling convention for the platform. When we call a`#[naked]`function we need to take care of this ourselves. Therefore we pass in the address to our "old" and "new"  `ThreadContext` using assembly. `%rdi` is the register for the first argument in the Linux calling convention (which is the same for MacOS) and `%rsi`is the register used for the second argument. We also need to be explicit about using the "C" calling convention when calling these function as Rust's ABI is not stable. Therefore we prefix the naked function with `extern "C"`.
 {% endhint %}
 
 The `self.threads.len() > 0`part in the end is just a way for us to prevent the compiler from optimizing our code away. This happens to me on Windows but not on Linux and is a common problem when running benchmarks for example. Therefore we could use [`std::hint::black_box`](https://doc.rust-lang.org/std/hint/fn.black\_box.html)to prevent the compiler from going too far and skipping steps we need in order to execute the code faster. I chose a different route and as long as it's commented it should be OK. The code never reaches this point anyway.
@@ -301,7 +301,7 @@ The function means that the function we passed in has returned and that means ou
 
 ```rust
 #[naked]
-unsafe fn skip() {
+unsafe extern "C" fn skip() {
     asm!("ret", options(noreturn))
 }
 ```
@@ -324,7 +324,7 @@ We are very soon at the finish line, just one more function to go. This one shou
 ```rust
 #[naked]
 #[no_mangle]
-unsafe fn switch() {
+unsafe extern "C" fn switch() {
     asm!(
         "mov [rdi + 0x00], rsp",
         "mov [rdi + 0x08], r15",

@@ -233,7 +233,7 @@ Last we need to change our `switch()`function and update our assembly. After all
 #[cfg(target_os = "windows")]
 #[naked]
 #[no_mangle]
-unsafe fn switch() {
+unsafe extern "C" fn switch() {
     asm!(
         "movaps      [rcx + 0x00], xmm6",
         "movaps      [rcx + 0x10], xmm7",
@@ -450,7 +450,7 @@ impl Runtime {
 }
 
 #[naked]
-unsafe fn skip() {
+unsafe extern "C" fn skip() {
     asm!("ret", options(noreturn))
 }
 
@@ -472,7 +472,7 @@ pub fn yield_thread() {
 #[cfg(not(target_os = "windows"))]
 #[naked]
 #[no_mangle]
-unsafe fn switch() {
+unsafe extern "C" fn switch() {
     asm!(
         "mov [rdi + 0x00], rsp",
         "mov [rdi + 0x08], r15",
@@ -578,7 +578,7 @@ impl Runtime {
 #[cfg(target_os = "windows")]
 #[naked]
 #[no_mangle]
-unsafe fn switch() {
+unsafe extern "C" fn switch() {
     asm!(
         "movaps      [rcx + 0x00], xmm6",
         "movaps      [rcx + 0x10], xmm7",
