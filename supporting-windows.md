@@ -305,6 +305,7 @@ You'll also find this code in the [Windows branch in the repository](https://git
 {% endhint %}
 
 ```rust
+#![feature(naked_functions)]
 use std::arch::asm;
 
 const DEFAULT_STACK_SIZE: usize = 1024 * 1024 * 2;
