@@ -74,7 +74,7 @@ unsafe fn gt_switch(new: *const ThreadContext) {
 }
 ```
 
-We use a trick here. We write the address of the function we want to run on our new stack. Then we pass the address of the first byte where we stored this address to the `rsp` register (the address we set to `new.rsp` will point to _an address located on our own stack that leads to the function above_). Got it?
+We use a trick here. We write the address of the function we want to run on our new stack. Then we pass the address of the first byte where we stored this address to the `rsp` register (the value we set to `new.rsp` will be _an address located on our own stack that stores the address of the `hello` function above_). Got it?
 
 The `ret` keyword transfers program control to the return address located on top of the stack. Since we pushed our address to the `rsp` register, the CPU will think that is the return address of the function it's currently running, so when we pass the `ret` instruction it returns directly into our own stack.
 
