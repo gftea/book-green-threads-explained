@@ -213,9 +213,9 @@ pub fn main() {
         let stack_bottom = stack.as_mut_ptr().offset(SSIZE);
         let sb_aligned = (stack_bottom as usize & !15) as *mut u8;
         S_PTR = sb_aligned;
-        std::ptr::write(stack_ptr.offset(SSIZE - 16) as *mut u64, hello as u64);
+        std::ptr::write(sb_aligned.offset(SSIZE - 16) as *mut u64, hello as u64);
         print_stack("BEFORE.txt");
-        ctx.rsp = stack_ptr.offset(SSIZE - 16) as u64;
+        ctx.rsp = sb_aligned.offset(SSIZE - 16) as u64;
         gt_switch(&mut ctx);
     }
 }
